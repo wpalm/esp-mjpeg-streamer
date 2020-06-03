@@ -83,6 +83,8 @@ esp_err_t MjpegStreamer::stream_httpd_handler(httpd_req_t *req) {
     return res;
   }
 
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+
   while (true) {
     if (!_this->frame_buffer) {
       ESP_LOGE(TAG, "Frame buffer is empty");
@@ -165,6 +167,8 @@ esp_err_t MjpegStreamer::stream_chunked_httpd_handler(httpd_req_t *req) {
   if (res != ESP_OK) {
     return res;
   }
+
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 
   while (true) {
     if (!_this->frame_buffer) {
