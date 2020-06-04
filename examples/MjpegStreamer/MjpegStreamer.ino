@@ -1,3 +1,8 @@
+/*
+  Demonstrates setting up a server that serves a MJPEG stream over WiFi.
+  Needs to be compile with PSRAM enabled.
+*/
+
 #include <Arduino.h>
 #include <WiFi.h>
 
