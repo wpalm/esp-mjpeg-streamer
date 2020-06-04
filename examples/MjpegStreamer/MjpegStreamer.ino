@@ -1,6 +1,6 @@
 /*
   Demonstrates setting up a server that serves a MJPEG stream over WiFi.
-  Needs to be compile with PSRAM enabled.
+  Needs to be compiled with PSRAM enabled.
 */
 
 #include <Arduino.h>
@@ -27,7 +27,7 @@ void generateFrame(uint16_t width, uint16_t height, uint8_t** output) {
 }
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
 
   // Connect to WiFi
   WiFi.mode(WIFI_STA);
