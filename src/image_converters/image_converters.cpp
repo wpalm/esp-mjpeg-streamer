@@ -51,50 +51,101 @@ static void *_malloc(size_t size) {
   return heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 }
 
-static IRAM_ATTR void convert_line_format_2d(uint8_t *src, pixformat_t format, uint8_t *dst, size_t width,
-                                             size_t in_channels, size_t line) {
+static IRAM_ATTR void _convert_line_format(uint8_t *src, pixformat_t format, uint8_t *dst, size_t width,
+                                           size_t in_channels, size_t line, bool line_format_2d) {
   int i = 0, o = 0, l = 0;
-  if (format == PIXFORMAT_GRAYSCALE) {
-    memcpy(dst, ((uint8_t **)src)[line], width);
-  } else if (format == PIXFORMAT_RGB888) {
-    l = width * 3;
-    for (i = 0; i < l; i += 3) {
-      dst[o++] = ((uint8_t **)src)[line][i + 2];
-      dst[o++] = ((uint8_t **)src)[line][i + 1];
-      dst[o++] = ((uint8_t **)src)[line][i];
+  if (line_format_2d) {
+    if (format == PIXFORMAT_GRAYSCALE) {
+      memcpy(dst, ((uint8_t **)src)[line], width);
+    } else if (format == PIXFORMAT_RGB888) {
+      l = width * 3;
+      for (i = 0; i < l; i += 3) {
+        dst[o++] = ((uint8_t **)src)[line][i + 2];
+        dst[o++] = ((uint8_t **)src)[line][i + 1];
+        dst[o++] = ((uint8_t **)src)[line][i];
+      }
+    } else if (format == PIXFORMAT_RGB565) {
+      l = width * 2;
+      for (i = 0; i < l; i += 2) {
+        dst[o++] = ((uint8_t **)src)[line][i] & 0xF8;
+        dst[o++] = (((uint8_t **)src)[line][i] & 0x07) << 5 | (((uint8_t **)src)[line][i + 1] & 0xE0) >> 3;
+        dst[o++] = (((uint8_t **)src)[line][i + 1] & 0x1F) << 3;
+      }
     }
-  } else if (format == PIXFORMAT_RGB565) {
-    l = width * 2;
-    for (i = 0; i < l; i += 2) {
-      dst[o++] = ((uint8_t **)src)[line][i] & 0xF8;
-      dst[o++] = (((uint8_t **)src)[line][i] & 0x07) << 5 | (((uint8_t **)src)[line][i + 1] & 0xE0) >> 3;
-      dst[o++] = (((uint8_t **)src)[line][i + 1] & 0x1F) << 3;
+    // TODO Add support for RGB444
+    // else if (format == PIXFORMAT_RGB444) {
+    // }
+    else if (format == PIXFORMAT_YUV422) {
+      uint8_t y0, y1, u, v;
+      uint8_t r, g, b;
+      l = width * 2;
+      for (i = 0; i < l; i += 4) {
+        y0 = ((uint8_t **)src)[line][i];
+        u = ((uint8_t **)src)[line][i + 1];
+        y1 = ((uint8_t **)src)[line][i + 2];
+        v = ((uint8_t **)src)[line][i + 3];
+
+        yuv2rgb(y0, u, v, &r, &g, &b);
+        dst[o++] = r;
+        dst[o++] = g;
+        dst[o++] = b;
+
+        yuv2rgb(y1, u, v, &r, &g, &b);
+        dst[o++] = r;
+        dst[o++] = g;
+        dst[o++] = b;
+      }
     }
-  } else if (format == PIXFORMAT_YUV422) {
-    uint8_t y0, y1, u, v;
-    uint8_t r, g, b;
-    l = width * 2;
-    for (i = 0; i < l; i += 4) {
-      y0 = ((uint8_t **)src)[line][i];
-      u = ((uint8_t **)src)[line][i + 1];
-      y1 = ((uint8_t **)src)[line][i + 2];
-      v = ((uint8_t **)src)[line][i + 3];
+  } else {
+    if (format == PIXFORMAT_GRAYSCALE) {
+      memcpy(dst, src + line * width, width);
+    } else if (format == PIXFORMAT_RGB888) {
+      l = width * 3;
+      src += l * line;
+      for (i = 0; i < l; i += 3) {
+        dst[o++] = src[i + 2];
+        dst[o++] = src[i + 1];
+        dst[o++] = src[i];
+      }
+    } else if (format == PIXFORMAT_RGB565) {
+      l = width * 2;
+      src += l * line;
+      for (i = 0; i < l; i += 2) {
+        dst[o++] = src[i] & 0xF8;
+        dst[o++] = (src[i] & 0x07) << 5 | (src[i + 1] & 0xE0) >> 3;
+        dst[o++] = (src[i + 1] & 0x1F) << 3;
+      }
+    }
+    // TODO Add support for RGB444
+    // else if (format == PIXFORMAT_RGB444) {
+    // }
+    else if (format == PIXFORMAT_YUV422) {
+      uint8_t y0, y1, u, v;
+      uint8_t r, g, b;
+      l = width * 2;
+      src += l * line;
+      for (i = 0; i < l; i += 4) {
+        y0 = src[i];
+        u = src[i + 1];
+        y1 = src[i + 2];
+        v = src[i + 3];
 
-      yuv2rgb(y0, u, v, &r, &g, &b);
-      dst[o++] = r;
-      dst[o++] = g;
-      dst[o++] = b;
+        yuv2rgb(y0, u, v, &r, &g, &b);
+        dst[o++] = r;
+        dst[o++] = g;
+        dst[o++] = b;
 
-      yuv2rgb(y1, u, v, &r, &g, &b);
-      dst[o++] = r;
-      dst[o++] = g;
-      dst[o++] = b;
+        yuv2rgb(y1, u, v, &r, &g, &b);
+        dst[o++] = r;
+        dst[o++] = g;
+        dst[o++] = b;
+      }
     }
   }
 }
 
-static bool convert_image_2d(uint8_t *src, uint16_t width, uint16_t height, pixformat_t format, uint8_t quality,
-                             jpge::output_stream *dst_stream) {
+static bool _convert_image(uint8_t *src, uint16_t width, uint16_t height, pixformat_t format, uint8_t quality,
+                           jpge::output_stream *dst_stream, bool line_format_2d) {
   int num_channels = 3;
   jpge::subsampling_t subsampling = jpge::H2V2;
 
@@ -127,7 +178,7 @@ static bool convert_image_2d(uint8_t *src, uint16_t width, uint16_t height, pixf
   }
 
   for (int i = 0; i < height; i++) {
-    convert_line_format_2d(src, format, line, width, num_channels, i);
+    _convert_line_format(src, format, line, width, num_channels, i, line_format_2d);
     if (!dst_image.process_scanline(line)) {
       ESP_LOGE(TAG, "JPG process line %u failed", i);
       free(line);
@@ -191,37 +242,29 @@ class callback_stream : public jpge::output_stream {
 
 bool toJpeg(uint8_t *src, size_t src_len, uint16_t width, uint16_t height, pixformat_t format, uint8_t quality,
             uint8_t **out, size_t *out_len, bool line_format_2d) {
-  if (line_format_2d) {
-    // todo: allocate proper buffer for holding JPEG data
-    // this should be enough for CIF frame size
-    int jpg_buf_len = 64 * 1024;
+  // todo: allocate proper buffer for holding JPEG data
+  // this should be enough for CIF frame size
+  int jpg_buf_len = 64 * 1024;
 
-    uint8_t *jpg_buf = (uint8_t *)_malloc(jpg_buf_len);
-    if (jpg_buf == NULL) {
-      ESP_LOGE(TAG, "JPG buffer malloc failed");
-      return false;
-    }
-    memory_stream dst_stream(jpg_buf, jpg_buf_len);
-
-    if (!convert_image_2d(src, width, height, format, quality, &dst_stream)) {
-      free(jpg_buf);
-      return false;
-    }
-
-    *out = jpg_buf;
-    *out_len = dst_stream.get_size();
-    return true;
-  } else {
-    return fmt2jpg(src, src_len, width, height, format, quality, out, out_len);
+  uint8_t *jpg_buf = (uint8_t *)_malloc(jpg_buf_len);
+  if (jpg_buf == NULL) {
+    ESP_LOGE(TAG, "JPG buffer malloc failed");
+    return false;
   }
+  memory_stream dst_stream(jpg_buf, jpg_buf_len);
+
+  if (!_convert_image(src, width, height, format, quality, &dst_stream, line_format_2d)) {
+    free(jpg_buf);
+    return false;
+  }
+
+  *out = jpg_buf;
+  *out_len = dst_stream.get_size();
+  return true;
 }
 
 bool toJpeg_cb(uint8_t *src, size_t src_len, uint16_t width, uint16_t height, pixformat_t format, uint8_t quality,
                jpg_out_cb cb, void *arg, bool line_format_2d) {
-  if (line_format_2d) {
-    callback_stream dst_stream(cb, arg);
-    return convert_image_2d(src, width, height, format, quality, &dst_stream);
-  } else {
-    return fmt2jpg_cb(src, src_len, width, height, format, quality, cb, arg);
-  }
+  callback_stream dst_stream(cb, arg);
+  return _convert_image(src, width, height, format, quality, &dst_stream, line_format_2d);
 }

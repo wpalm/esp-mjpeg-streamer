@@ -74,12 +74,14 @@ esp_err_t MjpegStreamer::setFrame(pixformat_t format, uint8_t *frame, uint16_t w
     case PIXFORMAT_RGB888:
       frame_buffer_size = width * height * 3;
       break;
-    case PIXFORMAT_RGB444:
-      frame_buffer_size = width * height * 2;
-      break;
-    case PIXFORMAT_RGB555:
-      frame_buffer_size = width * height * 2;
-      break;
+    // TODO Add support for RGB444
+    // case PIXFORMAT_RGB444:
+    //   frame_buffer_size = width * height * 2;
+    //   break;
+    // TODO Add support for RGB555
+    // case PIXFORMAT_RGB555:
+    //   frame_buffer_size = width * height * 2;
+    //   break;
     case PIXFORMAT_JPEG:
       ESP_LOGE(TAG, "Use setFrameJpeg to set frame from JPEG");
       return ESP_FAIL;
