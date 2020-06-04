@@ -93,6 +93,7 @@ esp_err_t MjpegStreamer::setFrame(pixformat_t format, uint8_t *frame, uint16_t w
   frame_buffer_format = format;
   frame_buffer_width = width;
   frame_buffer_height = height;
+  generate_frame = true;
 
   return res;
 }
@@ -107,6 +108,7 @@ esp_err_t MjpegStreamer::setFrameJpeg(uint8_t *frame, uint16_t width, uint16_t h
   frame_buffer_format = PIXFORMAT_JPEG;
   frame_buffer_width = width;
   frame_buffer_height = height;
+  generate_frame = true;
 
   return res;
 }
@@ -129,23 +131,32 @@ esp_err_t MjpegStreamer::stream_httpd_handler(httpd_req_t *req) {
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 
   while (true) {
-    if (!_this->frame_buffer) {
-      ESP_LOGE(TAG, "Frame buffer is empty");
-      res = ESP_FAIL;
-      break;
-    }
-
-    if (_this->frame_buffer_format != PIXFORMAT_JPEG) {
-      bool jpeg_converted = toJpeg(_this->frame_buffer, _this->frame_buffer_size, _this->frame_buffer_width,
-                                   _this->frame_buffer_height, _this->frame_buffer_format, 80, &_this->jpeg_buffer,
-                                   &_this->jpeg_buffer_size, _this->frame_buffer_line_format_2d);
-      if (!jpeg_converted) {
-        ESP_LOGE(TAG, "JPEG compression failed");
+    // Generate jpeg if frame is changed
+    if (_this->generate_frame) {
+      if (!_this->frame_buffer) {
+        ESP_LOGE(TAG, "Frame buffer is empty");
         res = ESP_FAIL;
+        break;
+      }
+      free(_this->jpeg_buffer);
+      if (_this->frame_buffer_format != PIXFORMAT_JPEG) {
+        bool jpeg_converted = toJpeg(_this->frame_buffer, _this->frame_buffer_size, _this->frame_buffer_width,
+                                     _this->frame_buffer_height, _this->frame_buffer_format, 80, &_this->jpeg_buffer,
+                                     &_this->jpeg_buffer_size, _this->frame_buffer_line_format_2d);
+        if (!jpeg_converted) {
+          ESP_LOGE(TAG, "JPEG compression failed");
+          res = ESP_FAIL;
+        }
+      } else {
+        _this->jpeg_buffer_size = _this->frame_buffer_size;
+        _this->jpeg_buffer = _this->frame_buffer;
       }
     } else {
-      _this->jpeg_buffer_size = _this->frame_buffer_size;
-      _this->jpeg_buffer = _this->frame_buffer;
+      if (!_this->jpeg_buffer) {
+        ESP_LOGE(TAG, "JPEG buffer is empty");
+        res = ESP_FAIL;
+        break;
+      }
     }
 
     if (res == ESP_OK) {
@@ -160,12 +171,8 @@ esp_err_t MjpegStreamer::stream_httpd_handler(httpd_req_t *req) {
       res = httpd_resp_send_chunk(req, (const char *)_this->jpeg_buffer, _this->jpeg_buffer_size);
     }
 
-    if (_this->frame_buffer_format != PIXFORMAT_JPEG) {
-      free(_this->jpeg_buffer);
-    }
-
     if (res != ESP_OK) {
-      break;
+      return res;
     }
     int64_t fr_end = esp_timer_get_time();
     int64_t frame_time = fr_end - last_frame;

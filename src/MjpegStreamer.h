@@ -21,6 +21,7 @@ class MjpegStreamer {
   static esp_err_t stream_chunked_httpd_handler(httpd_req_t *req);
 
  private:
+  bool generate_frame = false;
   uint8_t *frame_buffer;
   size_t frame_buffer_size;
   pixformat_t frame_buffer_format;
