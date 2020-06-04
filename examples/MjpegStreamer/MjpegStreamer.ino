@@ -15,13 +15,16 @@ const uint16_t WIDTH = 320;
 const uint16_t HEIGHT = 240;
 
 MjpegStreamer mjpegStreamer;
+uint8_t* frame;
 
 /// Generate RGB888 frame with random noise
 void generateFrame(uint16_t width, uint16_t height, uint8_t** output) {
   size_t pixel_size = sizeof(uint32_t);
   size_t frame_size = width * height * pixel_size;
 
-  *output = (uint8_t*)ps_malloc(frame_size);
+  if (!*output) {
+    *output = (uint8_t*)ps_malloc(frame_size);
+  }
 
   esp_fill_random(*output, frame_size);
 }
@@ -42,11 +45,9 @@ void setup() {
   Serial.print(F("Stream Link: http://"));
   Serial.print(WiFi.localIP());
   Serial.println(F("/mjpeg/1"));
-
-  uint8_t* frame;
-  generateFrame(WIDTH, HEIGHT, &frame);
-
-  mjpegStreamer.setFrame(PIXFORMAT_RGB888, frame, WIDTH, HEIGHT);
 }
 
-void loop() {}
+void loop() {
+  generateFrame(WIDTH, HEIGHT, &frame);
+  mjpegStreamer.setFrame(PIXFORMAT_RGB888, frame, WIDTH, HEIGHT);
+}
