@@ -7,8 +7,6 @@
 
 #define PART_BOUNDARY "123456789000000000000987654321"
 
-typedef uint16_t Color;
-
 /// MJPEG streamer
 class MjpegStreamer {
  public:
@@ -16,13 +14,14 @@ class MjpegStreamer {
       : server_port(server_port), streaming_mode_chunked(streaming_mode_chunked) {}
   ~MjpegStreamer();
   esp_err_t init(void);
-  esp_err_t setFrame(pixformat_t format, Color **frame, uint32_t width, uint32_t height, bool line_format_2d = false);
+  esp_err_t setFrame(pixformat_t format, uint8_t *frame, uint16_t width, uint16_t height, bool line_format_2d = false);
+  esp_err_t setFrameJpeg(uint8_t *frame, uint16_t width, uint16_t height, size_t size);
 
   static esp_err_t stream_httpd_handler(httpd_req_t *req);
   static esp_err_t stream_chunked_httpd_handler(httpd_req_t *req);
 
  private:
-  Color *frame_buffer;
+  uint8_t *frame_buffer;
   size_t frame_buffer_size;
   pixformat_t frame_buffer_format;
   uint32_t frame_buffer_width;
@@ -32,6 +31,7 @@ class MjpegStreamer {
   uint8_t *jpeg_buffer;
   size_t jpeg_buffer_size;
 
+  bool initialized = false;
   httpd_handle_t server;
   uint16_t server_port;
   const char *stream_uri = "/mjpeg/1";

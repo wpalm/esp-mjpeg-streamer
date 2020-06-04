@@ -10,7 +10,6 @@ MjpegStreamer::~MjpegStreamer() {
   if (server) {
     httpd_stop(server);
   }
-  free(frame_buffer);
   free(jpeg_buffer);
 }
 
@@ -45,6 +44,7 @@ esp_err_t MjpegStreamer::init(void) {
   if (res == ESP_OK) {
     ESP_LOGI(TAG, "MjpegStreamer started");
     ESP_LOGI(TAG, "MJPEG stream URI: " IPSTR ":%d%s", IP2STR(&ipInfo.ip), config.server_port, stream_uri_handler.uri);
+    initialized = true;
   } else {
     ESP_LOGE(TAG, "MjpegStreamer failed to start");
   }
@@ -52,16 +52,59 @@ esp_err_t MjpegStreamer::init(void) {
   return res;
 }
 
-esp_err_t MjpegStreamer::setFrame(pixformat_t format, Color **frame, uint32_t width, uint32_t height,
+esp_err_t MjpegStreamer::setFrame(pixformat_t format, uint8_t *frame, uint16_t width, uint16_t height,
                                   bool line_format_2d) {
   esp_err_t res = ESP_OK;
 
-  frame_buffer = (Color *)frame;
-  frame_buffer_size = width * height * sizeof(Color);
+  if (!initialized) {
+    ESP_LOGI(TAG, "Stream is not initialized");
+  }
+
+  frame_buffer = frame;
+  switch (format) {
+    case PIXFORMAT_RGB565:
+      frame_buffer_size = width * height * 2;
+      break;
+    case PIXFORMAT_YUV422:
+      frame_buffer_size = width * height * 2;
+      break;
+    case PIXFORMAT_GRAYSCALE:
+      frame_buffer_size = width * height * 1;
+      break;
+    case PIXFORMAT_RGB888:
+      frame_buffer_size = width * height * 3;
+      break;
+    case PIXFORMAT_RGB444:
+      frame_buffer_size = width * height * 2;
+      break;
+    case PIXFORMAT_RGB555:
+      frame_buffer_size = width * height * 2;
+      break;
+    case PIXFORMAT_JPEG:
+      ESP_LOGE(TAG, "Use setFrameJpeg to set frame from JPEG");
+      return ESP_FAIL;
+    default:
+      ESP_LOGE(TAG, "Frame format is not supported");
+      return ESP_FAIL;
+  }
 
   frame_buffer_line_format_2d = line_format_2d;
 
   frame_buffer_format = format;
+  frame_buffer_width = width;
+  frame_buffer_height = height;
+
+  return res;
+}
+
+esp_err_t MjpegStreamer::setFrameJpeg(uint8_t *frame, uint16_t width, uint16_t height, size_t size) {
+  esp_err_t res = ESP_OK;
+
+  frame_buffer_size = size;
+
+  frame_buffer_line_format_2d = false;
+
+  frame_buffer_format = PIXFORMAT_JPEG;
   frame_buffer_width = width;
   frame_buffer_height = height;
 
@@ -93,7 +136,7 @@ esp_err_t MjpegStreamer::stream_httpd_handler(httpd_req_t *req) {
     }
 
     if (_this->frame_buffer_format != PIXFORMAT_JPEG) {
-      bool jpeg_converted = toJpeg((uint8_t *)_this->frame_buffer, _this->frame_buffer_size, _this->frame_buffer_width,
+      bool jpeg_converted = toJpeg(_this->frame_buffer, _this->frame_buffer_size, _this->frame_buffer_width,
                                    _this->frame_buffer_height, _this->frame_buffer_format, 80, &_this->jpeg_buffer,
                                    &_this->jpeg_buffer_size, _this->frame_buffer_line_format_2d);
       if (!jpeg_converted) {
@@ -102,7 +145,7 @@ esp_err_t MjpegStreamer::stream_httpd_handler(httpd_req_t *req) {
       }
     } else {
       _this->jpeg_buffer_size = _this->frame_buffer_size;
-      _this->jpeg_buffer = (uint8_t *)_this->frame_buffer;
+      _this->jpeg_buffer = _this->frame_buffer;
     }
 
     if (res == ESP_OK) {
@@ -192,9 +235,9 @@ esp_err_t MjpegStreamer::stream_chunked_httpd_handler(httpd_req_t *req) {
     if (_this->frame_buffer_format != PIXFORMAT_JPEG) {
       jpg_chunking_t jchunk = {req, 0};
 
-      bool jpeg_converted = toJpeg_cb((uint8_t *)_this->frame_buffer, _this->frame_buffer_size,
-                                      _this->frame_buffer_width, _this->frame_buffer_height, _this->frame_buffer_format,
-                                      80, jpg_encode_stream, &jchunk, _this->frame_buffer_line_format_2d);
+      bool jpeg_converted = toJpeg_cb(_this->frame_buffer, _this->frame_buffer_size, _this->frame_buffer_width,
+                                      _this->frame_buffer_height, _this->frame_buffer_format, 80, jpg_encode_stream,
+                                      &jchunk, _this->frame_buffer_line_format_2d);
       _this->jpeg_buffer_size = jchunk.len;
 
       if (!jpeg_converted) {
@@ -205,7 +248,7 @@ esp_err_t MjpegStreamer::stream_chunked_httpd_handler(httpd_req_t *req) {
       httpd_resp_send_chunk(req, NULL, 0);
     } else {
       _this->jpeg_buffer_size = _this->frame_buffer_size;
-      _this->jpeg_buffer = (uint8_t *)_this->frame_buffer;
+      _this->jpeg_buffer = _this->frame_buffer;
 
       if (res == ESP_OK) {
         res = httpd_resp_send_chunk(req, (const char *)_this->jpeg_buffer, _this->jpeg_buffer_size);
