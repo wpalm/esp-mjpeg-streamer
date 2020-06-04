@@ -19,7 +19,7 @@ uint8_t* frame;
 
 /// Generate RGB888 frame with random noise
 void generateFrame(uint16_t width, uint16_t height, uint8_t** output) {
-  size_t pixel_size = sizeof(uint32_t);
+  size_t pixel_size = sizeof(uint8_t) * 3;
   size_t frame_size = width * height * pixel_size;
 
   if (!*output) {
